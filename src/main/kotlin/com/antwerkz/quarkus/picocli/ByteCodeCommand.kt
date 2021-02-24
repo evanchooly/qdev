@@ -19,10 +19,10 @@ class ByteCodeCommand() : Runnable {
     @Option(names = ["-v"], defaultValue = "true")
     private var verbose: Boolean = true
 
-    @Option(names = ["-m", "--modules"])
+    @Option(names = ["-m", "--modules"], split=",", description = ["List of modules to build in quarkus before building the local project"])
     private var modules = listOf<String>()
 
-    @Parameters(paramLabel = "ENTITY", description = ["One or more entities to catalog"])
+    @Parameters(paramLabel = "entity", description = ["One or more entities to catalog"])
     private var entities = listOf<String>()
 
     init {
@@ -30,6 +30,9 @@ class ByteCodeCommand() : Runnable {
     }
 
     override fun run() {
+        val qInstallCommand = QInstallCommand(modules)
+        qInstallCommand.debug = true
+        qInstallCommand.run()
         for (entity in entities) {
             for (type in listOf("main", "test")) {
                 for (source in Source.values()) {
@@ -38,10 +41,7 @@ class ByteCodeCommand() : Runnable {
                         directory.walk()
                             .firstOrNull { f -> f.name == "${entity}.${source.ext()}" }
                             ?.let {
-                                val packageName = it.readLines()
-                                    .first { line -> line.startsWith("package") }
-                                    .substringAfter(" ")
-                                    .substringBefore(";")
+                                val packageName = readPackage(it)
                                 for (base in listOf(entity, "${entity}\$Companion", "${entity}Dao", "${entity}Repository")) {
                                     dump(packageName, base)
                                 }
@@ -51,6 +51,11 @@ class ByteCodeCommand() : Runnable {
             }
         }
     }
+
+    private fun readPackage(it: File) = it.readLines()
+        .first { line -> line.startsWith("package") }
+        .substringAfter(" ")
+        .substringBefore(";")
 
     private fun dump(packageName: String, baseName: String) {
         val className = "$packageName.$baseName"
