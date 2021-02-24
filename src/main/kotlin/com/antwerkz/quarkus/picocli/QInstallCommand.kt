@@ -29,7 +29,7 @@ class QInstallCommand() : Runnable {
 
     override fun run() {
         for (module in modules) {
-            File(root, module).apply {
+            (if (module.startsWith("./")) File(module) else File(root, module)).apply {
                 if(exists()) {
                     install(this)
                 } else {
@@ -49,10 +49,14 @@ class QInstallCommand() : Runnable {
             .execute()
             .exitValue
 
+        if (exitValue != 0) {
+            System.exit(exitValue)
+        }
+
         return exitValue == 0
     }
     private fun options(rootDir: File): Array<String> {
         val buildOptions = if (clean) arrayOf("clean") else arrayOf()
-        return arrayOf("-f", rootDir.absolutePath, *buildOptions, "install")
+        return arrayOf("-f", rootDir.absolutePath, *buildOptions, "install", "-DskipTests")
     }
 }

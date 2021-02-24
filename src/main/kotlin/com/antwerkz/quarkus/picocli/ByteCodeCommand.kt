@@ -14,16 +14,19 @@ class ByteCodeCommand() : Runnable {
     }
 
     @Option(names = ["-d"], defaultValue = "false")
-    private var debug: Boolean = false
+    var debug: Boolean = false
+
+    @Option(names = ["-l", "--local"], defaultValue = "true")
+    var local: Boolean = true
 
     @Option(names = ["-v"], defaultValue = "true")
-    private var verbose: Boolean = true
+    var verbose: Boolean = true
 
     @Option(names = ["-m", "--modules"], split=",", description = ["List of modules to build in quarkus before building the local project"])
-    private var modules = listOf<String>()
+    var modules = listOf<String>()
 
     @Parameters(paramLabel = "entity", description = ["One or more entities to catalog"])
-    private var entities = listOf<String>()
+    var entities = listOf<String>()
 
     init {
         TARGET.mkdirs()
@@ -33,6 +36,12 @@ class ByteCodeCommand() : Runnable {
         val qInstallCommand = QInstallCommand(modules)
         qInstallCommand.debug = true
         qInstallCommand.run()
+
+        if (local) {
+            val localCommand = QInstallCommand(listOf("./"))
+            localCommand.debug = true
+            localCommand.run()
+        }
         for (entity in entities) {
             for (type in listOf("main", "test")) {
                 for (source in Source.values()) {
@@ -52,12 +61,12 @@ class ByteCodeCommand() : Runnable {
         }
     }
 
-    private fun readPackage(it: File) = it.readLines()
+    fun readPackage(it: File) = it.readLines()
         .first { line -> line.startsWith("package") }
         .substringAfter(" ")
         .substringBefore(";")
 
-    private fun dump(packageName: String, baseName: String) {
+    fun dump(packageName: String, baseName: String) {
         val className = "$packageName.$baseName"
 
         println("Scanning for ${baseName}")
@@ -67,7 +76,7 @@ class ByteCodeCommand() : Runnable {
         output(File("target/quarkus-app/quarkus/transformed-bytecode.jar"), className, File(TARGET, "${baseName}-quarkus.txt"))
     }
 
-    private fun javap(rootDir: File, className: String, outputFile: File): Boolean {
+    fun javap(rootDir: File, className: String, outputFile: File): Boolean {
         if (debug) println("   \\---  Looking in ${rootDir}")
         val exitValue = ProcessExecutor()
             .command("javap", *options(), "-classpath", rootDir.path, className)
@@ -82,12 +91,12 @@ class ByteCodeCommand() : Runnable {
         return exitValue == 0
     }
 
-    private fun options(): Array<String> {
+    fun options(): Array<String> {
         val options = arrayOf("-c", "-s", "-p")
         return if (verbose) options + "-v" else options
     }
 
-    private fun output(rootDir: File, className: String, outputFile: File): Boolean {
+    fun output(rootDir: File, className: String, outputFile: File): Boolean {
         return javap(rootDir, className, outputFile)
     }
 }
