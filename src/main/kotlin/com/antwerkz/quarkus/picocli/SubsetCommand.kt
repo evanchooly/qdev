@@ -7,6 +7,7 @@ import picocli.CommandLine.Parameters
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
+import java.util.concurrent.TimeUnit.MINUTES
 
 @CommandLine.Command(name = "subset")
 class SubsetCommand : Runnable {
@@ -43,7 +44,7 @@ class SubsetCommand : Runnable {
         }
 
         tests.forEach { test ->
-            val options = options(mutableListOf("install"))
+            val options = options(mutableListOf("verify"))
             if(native) {
                 options += "-Pnative"
             }
@@ -79,6 +80,7 @@ class SubsetCommand : Runnable {
             .command("mvn", *options.toTypedArray())
             .directory(rootDir)
             .redirectOutput(output)
+            .timeout(10, MINUTES)
         if (output != System.out) {
             executor.redirectOutputAlsoTo(System.out);
         }
