@@ -20,6 +20,9 @@ class QInstallCommand() : Runnable {
     @Option(names = ["-r", "--root"])
     var root = System.getProperty("user.home") + "/dev/quarkus"
 
+    @Option(names = ["-t", "--test"], description = ["If true, run the tests of the installed modules. Default: false"])
+    var test = false
+
     @Parameters(paramLabel = "module", description = ["One or more modules to build"])
     var modules = listOf<String>()
 
@@ -56,7 +59,11 @@ class QInstallCommand() : Runnable {
         return exitValue == 0
     }
     private fun options(rootDir: File): Array<String> {
-        val buildOptions = if (clean) arrayOf("clean") else arrayOf()
-        return arrayOf("-f", rootDir.absolutePath, *buildOptions, "install", "-DskipTests")
+        val buildOptions = mutableListOf("-f", rootDir.absolutePath)
+        buildOptions += if (clean) listOf("clean") else listOf()
+        buildOptions += listOf("source:jar", "install")
+        buildOptions += if (test) listOf() else listOf("-DskipTests")
+
+        return buildOptions.toTypedArray()
     }
 }

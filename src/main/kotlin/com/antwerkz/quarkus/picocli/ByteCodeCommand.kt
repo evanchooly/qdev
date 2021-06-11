@@ -8,7 +8,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 @CommandLine.Command(name = "bytecode")
-class ByteCodeCommand() : Runnable {
+class ByteCodeCommand : Runnable {
     companion object {
         val TARGET = File("target/bytecode")
     }
@@ -48,12 +48,13 @@ class ByteCodeCommand() : Runnable {
                     val directory = File(source.dir(type))
                     if (directory.isDirectory) {
                         directory.walk()
-                            .firstOrNull { f -> f.name == "${entity}.${source.ext()}" }
-                            ?.let {
-                                val packageName = readPackage(it)
-                                for (base in listOf(entity, "${entity}\$Companion", "${entity}Dao", "${entity}Repository")) {
-                                    dump(packageName, base)
-                                }
+                            .filter { f ->
+//                                println("f.nameWithoutExtension = ${f.nameWithoutExtension}")
+//                                println("f.nameWithoutExtension.startsWith(entity) = ${f.nameWithoutExtension.startsWith(entity)}")
+                                f.nameWithoutExtension.startsWith(entity)
+                            }
+                            .forEach {
+                                dump(it)
                             }
                     }
                 }
@@ -61,23 +62,28 @@ class ByteCodeCommand() : Runnable {
         }
     }
 
-    fun readPackage(it: File) = it.readLines()
+    private fun readPackage(it: File) = it.readLines()
         .first { line -> line.startsWith("package") }
         .substringAfter(" ")
         .substringBefore(";")
 
-    fun dump(packageName: String, baseName: String) {
-        val className = "$packageName.$baseName"
+    private fun dump(file: File) {
+        val packageName = readPackage(file)
+        val baseName = "$packageName.${file.nameWithoutExtension}"
 
-        println("Scanning for ${baseName}")
-        if (!output(File("target/classes"), className, File(TARGET, "${baseName}.txt"))) {
-            output(File("target/test-classes"), className, File(TARGET, "${baseName}.txt"))
+        for (suffix in listOf("", "\$Companion", "Dao", "Repository")) {
+            val className = baseName + suffix
+            println("Scanning $className")
+            val baseFileName = file.nameWithoutExtension + suffix
+            if (!output(File("target/classes"), className, File(TARGET, "$baseFileName.txt"))) {
+                output(File("target/test-classes"), className, File(TARGET, "$baseFileName.txt"))
+            }
+            output(File("target/quarkus-app/quarkus/transformed-bytecode.jar"), className, File(TARGET, "$baseFileName-quarkus.txt"))
         }
-        output(File("target/quarkus-app/quarkus/transformed-bytecode.jar"), className, File(TARGET, "${baseName}-quarkus.txt"))
     }
 
-    fun javap(rootDir: File, className: String, outputFile: File): Boolean {
-        if (debug) println("   \\---  Looking in ${rootDir}")
+    private fun javap(rootDir: File, className: String, outputFile: File): Boolean {
+        if (debug) println("   \\---  Looking in $rootDir")
         val exitValue = ProcessExecutor()
             .command("javap", *options(), "-classpath", rootDir.path, className)
             .redirectOutput(FileOutputStream(outputFile))
@@ -91,12 +97,12 @@ class ByteCodeCommand() : Runnable {
         return exitValue == 0
     }
 
-    fun options(): Array<String> {
+    private fun options(): Array<String> {
         val options = arrayOf("-c", "-s", "-p")
         return if (verbose) options + "-v" else options
     }
 
-    fun output(rootDir: File, className: String, outputFile: File): Boolean {
+    private fun output(rootDir: File, className: String, outputFile: File): Boolean {
         return javap(rootDir, className, outputFile)
     }
 }
