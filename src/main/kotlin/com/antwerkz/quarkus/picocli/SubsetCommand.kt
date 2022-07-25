@@ -7,7 +7,6 @@ import picocli.CommandLine.Parameters
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
-import kotlin.system.exitProcess
 
 @CommandLine.Command(name = "subset")
 class SubsetCommand : Runnable {
@@ -41,11 +40,11 @@ class SubsetCommand : Runnable {
     @Option(names = ["--root"])
     var root = System.getProperty("user.home") + "/dev/quarkus"
 
-    @Parameters(paramLabel = "test", description = ["One or more tests to run"])
-    var tests = listOf<String>()
+    @Parameters(paramLabel = "target", description = ["One or more targets to process"])
+    var targets = listOf<String>()
     val quarkusRoot = File(System.getProperty("user.home"), "dev/quarkus")
     override fun run() {
-        val (extensions, integrationTests) = tests.bucket()
+        val (extensions, integrationTests) = targets.bucket()
 
         if (full) {
             maven(
@@ -57,7 +56,7 @@ class SubsetCommand : Runnable {
                 )
             )
         } else if (extensions.isNotEmpty()) {
-            val qinstall = QInstallCommand(extensions)
+            val qinstall = QInstallCommand(extensions.toList())
             qinstall.debug = debug
             qinstall.clean = clean
             qinstall.test = test
@@ -120,9 +119,9 @@ class SubsetCommand : Runnable {
         return options
     }
 
-    private fun List<String>.bucket(): Pair<List<String>, List<String>> {
-        val extensions = mutableListOf<String>()
-        val integrationTests = mutableListOf<String>()
+    private fun List<String>.bucket(): Pair<Set<String>, Set<String>> {
+        val extensions = LinkedHashSet<String>()
+        val integrationTests = LinkedHashSet<String>()
 
         forEach {
             when {
@@ -130,6 +129,7 @@ class SubsetCommand : Runnable {
                 File("$root/integration-tests/$it").exists() -> integrationTests += "$root/integration-tests/$it"
                 it.startsWith("extensions") -> extensions += "$root/$it"
                 File("$root/extensions/$it").exists() -> extensions += "$root/extensions/$it"
+                it.endsWith(".out") -> {}
                 else -> throw IllegalArgumentException("$it is neither an integration test nor an extension")
             }
         }
