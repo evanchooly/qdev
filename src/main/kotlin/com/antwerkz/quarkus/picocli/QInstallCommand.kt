@@ -5,6 +5,7 @@ import picocli.CommandLine
 import picocli.CommandLine.Option
 import picocli.CommandLine.Parameters
 import java.io.File
+import kotlin.system.exitProcess
 
 @CommandLine.Command(name = "qinstall")
 class QInstallCommand() : Runnable {
@@ -32,14 +33,15 @@ class QInstallCommand() : Runnable {
 
     override fun run() {
         for (module in modules) {
-            (if (module.startsWith("./")) File(module) else File(root, module)).apply {
-                if(exists()) {
-                    install(this)
-                } else {
-                    println("${absolutePath} does not exist.")
-                    System.exit(-1)
-                }
-            }
+            install(module.normalize())
+        }
+    }
+
+    private fun String.normalize(): File {
+        val file = if (startsWith("./") || startsWith("/")) File(this) else File(root, this)
+        return if(file.exists()) file else {
+            println("${file.absolutePath} does not exist.")
+            exitProcess(-1)
         }
     }
 
