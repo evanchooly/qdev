@@ -9,9 +9,6 @@ import kotlin.system.exitProcess
 
 @CommandLine.Command(name = "qinstall")
 class QInstallCommand() : Runnable {
-    companion object {
-    }
-
     @Option(names = ["-c", "--clean"], defaultValue = "false")
     var clean: Boolean = false
 

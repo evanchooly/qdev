@@ -1,5 +1,6 @@
 package com.antwerkz.quarkus.picocli
 
+import org.apache.maven.model.io.DefaultModelReader
 import org.zeroturnaround.exec.ProcessExecutor
 import picocli.CommandLine
 import picocli.CommandLine.Option
@@ -12,12 +13,21 @@ import java.io.OutputStream
 class SubsetCommand : Runnable {
     companion object {
         val PROPERTIES = listOf(
-            "-Dtest-postgresql", "-Ddocker",
+            "-Ddocker",
+            "-Dtest-postgresql",
+            "-Dtest-containers",
+            "-Dstart-containers"
+        )
+        val BYTECODE = listOf(
+            "-Dquarkus.package.quiltflower.enabled=true",
             "-Dquarkus.debug.generated-classes-dir=target/q/generated",
-            "-Dquarkus.debug.transformed-classes-dir=target/q/transformed",
-            "-Dquarkus.debug.generated-sources-dir=target/q/sources"
+            "-Dquarkus.debug.generated-sources-dir=target/q/sources",
+            "-Dquarkus.debug.transformed-classes-dir=target/q/transformed"
         )
     }
+
+    @Option(names = ["-b"], defaultValue = "false")
+    var bytecode: Boolean = false
 
     @Option(names = ["-d"], defaultValue = "false")
     var debug: Boolean = false
@@ -46,55 +56,57 @@ class SubsetCommand : Runnable {
     override fun run() {
         val (extensions, integrationTests) = targets.bucket()
 
+        val outputs = mutableListOf<File>()
         if (full) {
             maven(
-                quarkusRoot, options(
-                    mutableListOf(
-                        "-T", "4C", "-DskipTests", "-DskipITs", "-DskipExtensionValidation",
-                        "-Dskip.gradle.tests", "clean", "install"
-                    )
+                quarkusRoot,
+                mutableListOf(
+                    "-T", "4C", "-DskipTests", "-DskipITs", "-DskipExtensionValidation",
+                    "-Dskip.gradle.tests", "clean", "install"
+                        + options()
                 )
             )
         } else if (extensions.isNotEmpty()) {
-            val qinstall = QInstallCommand(extensions.toList())
-            qinstall.debug = debug
-            qinstall.clean = clean
-            qinstall.test = test
-            qinstall.run()
+            outputs += extensions.map(::build)
+
         }
+        outputs += integrationTests.map(::build)
 
-        val outputs = mutableListOf<File>()
-        integrationTests
-            .forEach { test ->
-                val file = File(test)
-                if(!file.exists()) throw IllegalArgumentException("${file.absolutePath} does not exist.")
-                val core = mutableListOf<String>()
-                if (clean) {
-                    core += "clean"
-                }
-
-                core += "verify"
-                val options = options(core)
-                if (native) {
-                    options += "-Dnative"
-                }
-                val output = File(quarkusRoot, "${file.name}.out")
-                outputs += output
-                maven(file, options, FileOutputStream(output))
-            }
-
-        outputs
-            .filter { it.exists() }
-            .filter { it.readLines().any { line -> line.contains("[ERROR]") } }
-            .forEach {
-                println("Errors found in ${it.name}")
-            }
         outputs
             .filter { it.exists() }
             .filter { it.readLines().none { line -> line.contains("[ERROR]") } }
             .forEach {
                 it.delete()
             }
+        outputs
+            .filter { it.exists() }
+            .filter { it.readLines().any { line -> line.contains("[ERROR]") } }
+            .forEach {
+                println("Errors found in ${it.name}")
+            }
+    }
+
+    private fun build(root: String): File {
+        val file = File(root)
+        if (!file.exists()) throw IllegalArgumentException("${file.absolutePath} does not exist.")
+        val core = mutableListOf<String>()
+        if (clean) {
+            core += "clean"
+        }
+
+        core += "install"
+        val options: MutableList<String> = (core + options()) as MutableList<String>
+        if (native) {
+            options += "-Dnative"
+        }
+        val output = logFile(file)
+        maven(file, options, FileOutputStream(output))
+        return output
+    }
+
+    private fun logFile(root: File): File {
+        val model = DefaultModelReader().read(File(root, "pom.xml"), mapOf<String, Any>())
+        return File(quarkusRoot, "${model.artifactId}.out")
     }
 
     private fun maven(rootDir: File, options: List<String>, output: OutputStream = System.out): Int {
@@ -109,9 +121,12 @@ class SubsetCommand : Runnable {
         return executor.execute().exitValue
     }
 
-    private fun options(core: MutableList<String>): MutableList<String> {
-        val options = core
+    private fun options(): MutableList<String> {
+        val options = mutableListOf<String>()
         options += PROPERTIES
+        if (bytecode) {
+            options += BYTECODE
+        }
         resume?.let {
             options += listOf("-rf", if (it.startsWith(":")) it else ":$it")
         }
@@ -122,13 +137,18 @@ class SubsetCommand : Runnable {
     private fun List<String>.bucket(): Pair<Set<String>, Set<String>> {
         val extensions = LinkedHashSet<String>()
         val integrationTests = LinkedHashSet<String>()
-
-        forEach {
+        map {
             when {
-                it.startsWith("integration-tests") -> integrationTests += "$root/$it"
-                File("$root/integration-tests/$it").exists() -> integrationTests += "$root/integration-tests/$it"
-                it.startsWith("extensions") -> extensions += "$root/$it"
-                File("$root/extensions/$it").exists() -> extensions += "$root/extensions/$it"
+                File(it).exists() -> File(it).absoluteFile
+                File(root, it).exists() -> File(root, it)
+                File("$root/integration-tests", it).exists() -> File("$root/integration-tests", it)
+                File("$root/extensions", it).exists() -> File("$root/extensions", it)
+                else -> throw IllegalArgumentException("$it is neither an integration test nor an extension")
+            }
+        }.forEach {
+            when {
+                it.relativeToOrNull(File("$root/integration-tests")) != null -> integrationTests += it.absolutePath
+                it.relativeToOrNull(File("$root/extensions")) != null -> extensions += it.absolutePath
                 it.endsWith(".out") -> {}
                 else -> throw IllegalArgumentException("$it is neither an integration test nor an extension")
             }

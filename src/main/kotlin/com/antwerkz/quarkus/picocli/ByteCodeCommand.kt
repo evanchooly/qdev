@@ -5,6 +5,7 @@ import picocli.CommandLine
 import picocli.CommandLine.Option
 import picocli.CommandLine.Parameters
 import java.io.File
+import java.io.FileFilter
 import java.io.FileOutputStream
 
 @CommandLine.Command(name = "bytecode")
@@ -78,7 +79,11 @@ class ByteCodeCommand : Runnable {
             if (!output(File("target/classes"), className, File(TARGET, "$baseFileName.txt"))) {
                 output(File("target/test-classes"), className, File(TARGET, "$baseFileName.txt"))
             }
-            output(File("target/quarkus-app/quarkus/transformed-bytecode.jar"), className, File(TARGET, "$baseFileName-quarkus.txt"))
+            File("target/quarkus-app/")
+                .listFiles { pathname -> pathname.name.endsWith(".jar") }
+                ?.forEach {
+                    output(it, className, File(TARGET, "$baseFileName-quarkus.txt"))
+                }
         }
     }
 
@@ -98,7 +103,7 @@ class ByteCodeCommand : Runnable {
     }
 
     private fun options(): Array<String> {
-        val options = arrayOf("-c", "-s", "-p")
+        val options = arrayOf("-c", "-s", "-p", "-l")
         return if (verbose) options + "-v" else options
     }
 
