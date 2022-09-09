@@ -44,16 +44,18 @@ class SubsetCommand : Runnable {
     @Option(names = ["-r", "--resume"])
     var resume: String? = null
 
-    @Option(names = ["-t", "--test"], description = ["If true, run the tests of the installed modules. Default: false"])
-    var test = false
+    @Option(names = ["-t", "--test"], description = ["run the tests of the installed modules. Default: false"])
+    var runTests = false
 
     @Option(names = ["--root"])
     var root = System.getProperty("user.home") + "/dev/quarkus"
 
     @Parameters(paramLabel = "target", description = ["One or more targets to process"])
     var targets = listOf<String>()
-    val quarkusRoot = File(System.getProperty("user.home"), "dev/quarkus")
+    val quarkusRoot = File(root)
+
     override fun run() {
+
         val (extensions, integrationTests) = targets.bucket()
 
         val outputs = mutableListOf<File>()
@@ -99,6 +101,9 @@ class SubsetCommand : Runnable {
         if (native) {
             options += "-Dnative"
         }
+        if (!runTests && !isIntegrationTest(File(root))) {
+            options += "-DskipTests"
+        }
         val output = logFile(file)
         maven(file, options, FileOutputStream(output))
         return output
@@ -110,7 +115,10 @@ class SubsetCommand : Runnable {
     }
 
     private fun maven(rootDir: File, options: List<String>, output: OutputStream = System.out): Int {
-        if (debug) println("---  Building ${rootDir}")
+        if (debug) {
+            println("---  Building ${rootDir}")
+            println("---  executing:  mvn ${options.joinToString(" ")}")
+        }
         val executor = ProcessExecutor()
             .command("mvn", *options.toTypedArray())
             .directory(rootDir)
@@ -140,19 +148,21 @@ class SubsetCommand : Runnable {
         map {
             when {
                 File(it).exists() -> File(it).absoluteFile
-                File(root, it).exists() -> File(root, it)
+                File(quarkusRoot, it).exists() -> File(quarkusRoot, it)
                 File("$root/integration-tests", it).exists() -> File("$root/integration-tests", it)
                 File("$root/extensions", it).exists() -> File("$root/extensions", it)
                 else -> throw IllegalArgumentException("$it is neither an integration test nor an extension")
             }
         }.forEach {
             when {
-                it.relativeToOrNull(File("$root/integration-tests")) != null -> integrationTests += it.absolutePath
-                it.relativeToOrNull(File("$root/extensions")) != null -> extensions += it.absolutePath
-                it.endsWith(".out") -> {}
-                else -> throw IllegalArgumentException("$it is neither an integration test nor an extension")
+                isIntegrationTest(it) -> integrationTests += it.absolutePath
+                else -> extensions += it.absolutePath
             }
         }
         return Pair(extensions, integrationTests)
     }
+
+    private fun isExtension(it: File) = it.relativeToOrNull(File("$root/extensions")) != null
+
+    private fun isIntegrationTest(it: File) = it.relativeToOrNull(File("$root/integration-tests")) != null
 }
