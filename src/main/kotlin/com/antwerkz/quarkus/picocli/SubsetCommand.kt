@@ -164,5 +164,5 @@ class SubsetCommand : Runnable {
 
     private fun isExtension(it: File) = it.relativeToOrNull(File("$root/extensions")) != null
 
-    private fun isIntegrationTest(it: File) = it.relativeToOrNull(File("$root/integration-tests")) != null
+    private fun isIntegrationTest(it: File) = it.startsWith(File("$root/integration-tests"))
 }
