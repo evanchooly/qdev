@@ -1,13 +1,13 @@
 package com.antwerkz.quarkus.picocli
 
+import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStream
 import org.apache.maven.model.io.DefaultModelReader
 import org.zeroturnaround.exec.ProcessExecutor
 import picocli.CommandLine
 import picocli.CommandLine.Option
 import picocli.CommandLine.Parameters
-import java.io.File
-import java.io.FileOutputStream
-import java.io.OutputStream
 
 @CommandLine.Command(name = "subset")
 class SubsetCommand : Runnable {
@@ -80,12 +80,28 @@ class SubsetCommand : Runnable {
             .forEach {
                 it.delete()
             }
-        outputs
+        val errors = outputs
             .filter { it.exists() }
             .filter { it.readLines().any { line -> line.contains("[ERROR]") } }
-            .forEach {
+        errors.forEach {
                 println("Errors found in ${it.name}")
             }
+
+        if (errors.isNotEmpty()) {
+            println("Rerun failing tests with: ")
+            println(" subset " + failingModules(integrationTests, errors))
+        }
+    }
+
+    private fun failingModules(integrationTests: Set<String>, errors: List<File>): String {
+        val moduleNames = errors.map { it.nameWithoutExtension }
+        val reader = DefaultModelReader()
+
+        return integrationTests
+            .map { File(it) to reader.read(File(it, "pom.xml"), mapOf<String, Any>()) }
+            .map { (file, model) -> file to model.artifactId }
+            .filter { it.second in moduleNames }
+            .joinToString(" ") { it.first.name }
     }
 
     private fun build(root: String): File {

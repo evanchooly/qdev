@@ -1,12 +1,11 @@
 package com.antwerkz.quarkus.picocli
 
+import java.io.File
+import java.io.FileOutputStream
 import org.zeroturnaround.exec.ProcessExecutor
 import picocli.CommandLine
 import picocli.CommandLine.Option
 import picocli.CommandLine.Parameters
-import java.io.File
-import java.io.FileFilter
-import java.io.FileOutputStream
 
 @CommandLine.Command(name = "bytecode")
 class ByteCodeCommand : Runnable {
@@ -50,8 +49,6 @@ class ByteCodeCommand : Runnable {
                     if (directory.isDirectory) {
                         directory.walk()
                             .filter { f ->
-//                                println("f.nameWithoutExtension = ${f.nameWithoutExtension}")
-//                                println("f.nameWithoutExtension.startsWith(entity) = ${f.nameWithoutExtension.startsWith(entity)}")
                                 f.nameWithoutExtension.startsWith(entity)
                             }
                             .forEach {
@@ -64,24 +61,45 @@ class ByteCodeCommand : Runnable {
     }
 
     private fun readPackage(it: File) = it.readLines()
-        .first { line -> line.startsWith("package") }
-        .substringAfter(" ")
-        .substringBefore(";")
+        .firstOrNull { line -> line.startsWith("package") }
+        ?.substringAfter(" ")
+        ?.substringBefore(";")
+        ?.plus(".")
+        ?: ""
 
     private fun dump(file: File) {
+        if (debug) println("dumping $file")
         val packageName = readPackage(file)
-        val baseName = "$packageName.${file.nameWithoutExtension}"
+        val baseName = "${packageName}${file.nameWithoutExtension}"
 
         for (suffix in listOf("", "\$Companion", "Dao", "Repository")) {
             val className = baseName + suffix
-            println("Scanning $className")
             val baseFileName = file.nameWithoutExtension + suffix
-            if (!output(File("target/classes"), className, File(TARGET, "$baseFileName.txt"))) {
-                output(File("target/test-classes"), className, File(TARGET, "$baseFileName.txt"))
-            }
-            File("target/quarkus-app/")
-                .listFiles { pathname -> pathname.name.endsWith(".jar") }
-                ?.forEach {
+            listOf(File("target/classes"), File("target/test-classes"))
+                .flatMap {
+                    it.walkTopDown()
+                        .filter { found ->
+                            found.nameWithoutExtension == baseName
+                                || found.nameWithoutExtension.startsWith("$baseName\$")
+                        }
+                        .toList()
+                }
+                .forEach {
+                    val name = "${packageName}${it.nameWithoutExtension}"
+                    var root = File(it.path.replace("${name}.class", ""))
+                    output(root, name, File(TARGET, "${it.nameWithoutExtension}.txt"))
+                }
+
+            File("target/quarkus-app/app")
+                .listFiles()
+                .flatMap {
+                    it.walkTopDown()
+                        .filter { found ->
+                            found.extension == "jar"
+                        }
+                        .toList()
+                }
+                .forEach {
                     output(it, className, File(TARGET, "$baseFileName-quarkus.txt"))
                 }
         }
