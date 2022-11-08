@@ -121,7 +121,10 @@ class SubsetCommand : Runnable {
             options += "-DskipTests"
         }
         val output = logFile(file)
-        maven(file, options, FileOutputStream(output))
+        val exitCode = maven(file, options, FileOutputStream(output))
+        if (exitCode != 0) {
+            System.exit(exitCode)
+        }
         return output
     }
 
